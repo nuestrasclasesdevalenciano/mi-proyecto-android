@@ -12,10 +12,14 @@ object TmdbRetrofit {
         val clientBuilder = OkHttpClient.Builder()
         if (apiKey.isNotBlank()) {
             clientBuilder.addInterceptor { chain ->
-                val url = chain.request().url.newBuilder()
+                val original = chain.request()
+                val url = original.url.newBuilder()
                     .addQueryParameter("api_key", apiKey)
                     .build()
-                chain.proceed(chain.request().newBuilder().url(url).build())
+                val request = original.newBuilder()
+                    .url(url)
+                    .build()
+                chain.proceed(request)
             }
         }
         return Retrofit.Builder()

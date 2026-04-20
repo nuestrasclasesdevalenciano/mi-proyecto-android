@@ -27,6 +27,21 @@ sealed interface BuscarUiState {
     data class Error(val mensaje: String) : BuscarUiState
 }
 
+sealed interface DetalleTmdbUiState {
+    data object Cargando : DetalleTmdbUiState
+    data class Exito(
+        val id: Long,
+        val titulo: String,
+        val descripcion: String,
+        val posterPath: String?,
+        val backdropPath: String?,
+        val reparto: List<com.example.seriespeliculas.network.TmdbCastDto>,
+        val generos: List<String>,
+        val mediaType: String
+    ) : DetalleTmdbUiState
+    data class Error(val mensaje: String) : DetalleTmdbUiState
+}
+
 enum class OrdenTipo(val etiqueta: String) {
     FECHA_DESC("Más recientes"),
     FECHA_ASC("Más antiguos"),
@@ -93,6 +108,25 @@ class SeriesViewModel(
 
     private val buscarStateInternal = MutableStateFlow<BuscarUiState>(BuscarUiState.Inicial)
     val buscarState: StateFlow<BuscarUiState> = buscarStateInternal.asStateFlow()
+
+    private val tendenciasInternal = MutableStateFlow<List<TmdbSearchItem>>(emptyList())
+    val tendencias: StateFlow<List<TmdbSearchItem>> = tendenciasInternal.asStateFlow()
+
+    init {
+        cargarTendencias()
+    }
+
+    private fun cargarTendencias() {
+        if (!tmdbHabilitado) return
+        viewModelScope.launch {
+            try {
+                val items = tmdbRepository.obtenerTendencias()
+                tendenciasInternal.value = items
+            } catch (e: Exception) {
+                // Silently fail for trending
+            }
+        }
+    }
 
     private var buscarJob: Job? = null
 
@@ -165,6 +199,34 @@ class SeriesViewModel(
     }
 
     suspend fun cargarSerie(id: Long): SerieEntity? = seriesRepository.getById(id)
+
+    suspend fun obtenerDetalleTmdb(id: Long, type: String): DetalleTmdbUiState.Exito {
+        return if (type == "movie") {
+            val d = tmdbRepository.obtenerDetallePelicula(id)
+            DetalleTmdbUiState.Exito(
+                id = d.id,
+                titulo = d.title,
+                descripcion = d.overview ?: "",
+                posterPath = d.posterPath,
+                backdropPath = d.backdropPath,
+                reparto = d.credits?.cast ?: emptyList(),
+                generos = d.genres?.map { it.name } ?: emptyList(),
+                mediaType = "movie"
+            )
+        } else {
+            val d = tmdbRepository.obtenerDetalleSerie(id)
+            DetalleTmdbUiState.Exito(
+                id = d.id,
+                titulo = d.name,
+                descripcion = d.overview ?: "",
+                posterPath = d.posterPath,
+                backdropPath = d.backdropPath,
+                reparto = d.credits?.cast ?: emptyList(),
+                generos = d.genres?.map { it.name } ?: emptyList(),
+                mediaType = "tv"
+            )
+        }
+    }
 }
 
 data class Quadruple<out A, out B, out C, out D>(

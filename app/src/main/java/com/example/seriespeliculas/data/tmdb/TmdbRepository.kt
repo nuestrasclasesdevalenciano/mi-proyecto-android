@@ -14,28 +14,56 @@ class TmdbRepository(
         val response = try {
             api.searchMulti(query = q)
         } catch (e: HttpException) {
-            val mensaje = when (e.code()) {
-                401 -> "La clave de TMDB no es válida."
-                429 -> "Demasiadas peticiones. Prueba dentro de un momento."
-                in 500..599 -> "TMDB no responde. Inténtalo más tarde."
-                else -> "Error TMDB (${e.code()})."
-            }
-            throw IllegalStateException(mensaje, e)
+            handleHttpException(e)
         }
 
-        return response.results.mapNotNull { dto ->
-            val type = dto.mediaType ?: return@mapNotNull null
-            if (type != "movie" && type != "tv") return@mapNotNull null
-            val titulo = dto.title ?: dto.name ?: return@mapNotNull null
-            TmdbSearchItem(
-                id = dto.id,
-                titulo = titulo,
-                posterPath = dto.posterPath,
-                overview = dto.overview,
-                mediaType = type,
-                generoIds = dto.genreIds ?: emptyList(),
-            )
+        return response.results.mapNotNull { it.toDomain() }
+    }
+
+    suspend fun obtenerTendencias(): List<TmdbSearchItem> {
+        if (!apiKeyConfigurada) return emptyList()
+        val response = try {
+            api.getTrending()
+        } catch (e: HttpException) {
+            handleHttpException(e)
         }
+        return response.results.mapNotNull { it.toDomain() }
+    }
+
+    suspend fun obtenerDetallePelicula(id: Long) = try {
+        api.getMovieDetails(id)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerDetalleSerie(id: Long) = try {
+        api.getTvDetails(id)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    private fun handleHttpException(e: HttpException): Nothing {
+        val mensaje = when (e.code()) {
+            401 -> "La clave de TMDB no es válida."
+            429 -> "Demasiadas peticiones. Prueba dentro de un momento."
+            in 500..599 -> "TMDB no responde. Inténtalo más tarde."
+            else -> "Error TMDB (${e.code()})."
+        }
+        throw IllegalStateException(mensaje, e)
+    }
+
+    private fun com.example.seriespeliculas.network.TmdbMultiResultDto.toDomain(): TmdbSearchItem? {
+        val type = mediaType ?: return null
+        if (type != "movie" && type != "tv") return null
+        val titulo = title ?: name ?: return null
+        return TmdbSearchItem(
+            id = id,
+            titulo = titulo,
+            posterPath = posterPath,
+            overview = overview,
+            mediaType = type,
+            generoIds = genreIds ?: emptyList(),
+        )
     }
 
     fun mapearGenero(ids: List<Int>): String? {

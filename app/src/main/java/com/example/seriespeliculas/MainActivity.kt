@@ -54,6 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -65,21 +68,15 @@ import com.example.seriespeliculas.data.tmdb.TmdbImages
 import com.example.seriespeliculas.data.tmdb.TmdbRepository
 import com.example.seriespeliculas.network.TmdbRetrofit
 import com.example.seriespeliculas.ui.DetalleSerieScreen
+import com.example.seriespeliculas.ui.DetalleTmdbScreen
 import com.example.seriespeliculas.ui.theme.SeriesPeliculasTheme
 import java.util.Properties
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        val properties = Properties()
-        val localPropertiesFile = projectDir.parentFile?.resolve("local.properties")
-        val apiKey = if (localPropertiesFile?.exists() == true) {
-            localPropertiesFile.inputStream().use { properties.load(it) }
-            properties.getProperty("TMDB_API_KEY") ?: ""
-        } else {
-            ""
-        }
+
+        val apiKey = BuildConfig.TMDB_API_KEY
 
         val db = AppDatabase.getInstance(applicationContext)
         val repository = SeriesRepository(db.serieDao())
@@ -102,15 +99,24 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(innerPadding),
                             onIrABuscar = { pantallaActual = Pantalla.Buscar },
                             onVerDetalle = { id -> pantallaActual = Pantalla.Detalle(id) },
+                            onVerDetalleTmdb = { id, type -> pantallaActual = Pantalla.DetalleTmdb(id, type) },
                             onVerEstadisticas = { pantallaActual = Pantalla.Estadisticas }
                         )
                         is Pantalla.Buscar -> BuscarScreen(
                             viewModel = viewModel,
                             modifier = Modifier.padding(innerPadding),
-                            onVolver = { pantallaActual = Pantalla.MisListas }
+                            onVolver = { pantallaActual = Pantalla.MisListas },
+                            onVerDetalleTmdb = { id, type -> pantallaActual = Pantalla.DetalleTmdb(id, type) }
                         )
                         is Pantalla.Detalle -> DetalleSerieScreen(
                             serieId = p.id,
+                            viewModel = viewModel,
+                            modifier = Modifier.padding(innerPadding),
+                            onVolver = { pantallaActual = Pantalla.MisListas }
+                        )
+                        is Pantalla.DetalleTmdb -> DetalleTmdbScreen(
+                            tmdbId = p.id,
+                            mediaType = p.type,
                             viewModel = viewModel,
                             modifier = Modifier.padding(innerPadding),
                             onVolver = { pantallaActual = Pantalla.MisListas }
@@ -133,6 +139,7 @@ class MainActivity : ComponentActivity() {
         data object Buscar : Pantalla
         data object Estadisticas : Pantalla
         data class Detalle(val id: Long) : Pantalla
+        data class DetalleTmdb(val id: Long, val type: String) : Pantalla
     }
 }
 
@@ -141,6 +148,7 @@ fun MisListasScreen(
     viewModel: SeriesViewModel,
     onIrABuscar: () -> Unit,
     onVerDetalle: (Long) -> Unit,
+    onVerDetalleTmdb: (Long, String) -> Unit,
     onVerEstadisticas: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -150,6 +158,7 @@ fun MisListasScreen(
     val ordenSeleccionado by viewModel.ordenSeleccionado.collectAsState()
     val generoSeleccionado by viewModel.generoSeleccionado.collectAsState()
     val todasLasSeries by viewModel.todasLasSeries.collectAsState()
+    val tendencias by viewModel.tendencias.collectAsState()
     var mostrarMenuOrden by remember { mutableStateOf(false) }
 
     val generosExistentes = todasLasSeries.mapNotNull { it.genero }.distinct().sorted()
@@ -159,11 +168,96 @@ fun MisListasScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "Mis listas",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // 1. Search Bar entry point at the very top
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+                .clickable { onIrABuscar() },
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            shape = MaterialTheme.shapes.extraLarge
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "Buscar películas o series...",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+        }
+
+        // 2. Trending
+        if (tendencias.isNotEmpty()) {
+            Text(
+                text = "Tendencias de hoy",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(tendencias) { item ->
+                    Card(
+                        modifier = Modifier
+                            .width(130.dp)
+                            .clickable { onVerDetalleTmdb(item.id, item.mediaType ?: "movie") },
+                        shape = MaterialTheme.shapes.large,
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column {
+                            AsyncImage(
+                                model = TmdbImages.urlPoster(item.posterPath, "w185"),
+                                contentDescription = item.titulo,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp),
+                                contentScale = ContentScale.Crop
+                            )
+                            Text(
+                                text = item.titulo,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        // 3. User's lists title and stats button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Mis listas",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = onVerEstadisticas) {
+                Icon(Icons.Default.Info, contentDescription = "Estadísticas")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -280,20 +374,7 @@ fun MisListasScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(
-                onClick = onIrABuscar,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Buscar nuevas")
-            }
-            OutlinedButton(
-                onClick = onVerEstadisticas,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Info, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Estadísticas")
-            }
+            // Se han movido arriba
         }
     }
 }
@@ -457,6 +538,35 @@ fun EstadisticasScreen(
     }
 }
 
+@Preview(showBackground = true)
+@Composable
+fun ItemSeriePreview() {
+    SeriesPeliculasTheme {
+        ItemSerie(
+            serie = SerieEntity(
+                titulo = "Ejemplo de Película",
+                lista = ListaTipo.POR_VER.name,
+                genero = "Acción",
+                valoracion = 4,
+                mediaType = "movie"
+            ),
+            onEliminar = {},
+            onClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ProgresoItemPreview() {
+    SeriesPeliculasTheme {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ProgresoItem("Vistas", 5, 10, Color(0xFF4CAF50))
+            ProgresoItem("Pendientes", 3, 10, Color(0xFF2196F3))
+        }
+    }
+}
+
 data class LogroData(val titulo: String, val descripcion: String, val desbloqueado: Boolean)
 
 @Composable
@@ -547,7 +657,8 @@ private fun PestanaLista(
 fun BuscarScreen(
     viewModel: SeriesViewModel,
     modifier: Modifier = Modifier,
-    onVolver: () -> Unit
+    onVolver: () -> Unit,
+    onVerDetalleTmdb: (Long, String) -> Unit
 ) {
     var texto by remember { mutableStateOf("") }
     val buscarState by viewModel.buscarState.collectAsState()
@@ -609,10 +720,9 @@ fun BuscarScreen(
                                 )
                             }
                             Button(onClick = { 
-                                viewModel.añadirResultadoTmdb(item)
-                                onVolver()
+                                onVerDetalleTmdb(item.id, item.mediaType ?: "movie")
                             }) {
-                                Text("Añadir")
+                                Text("Ver")
                             }
                         }
                         HorizontalDivider()
