@@ -17,4 +17,10 @@ data class SerieEntity(
     val valoracion: Int = 0,
     val notas: String = "",
     val genero: String? = null,
+    val temporadaActual: Int = 1,
+    val capituloActual: Int = 1,
+    val fechaLanzamiento: String? = null,
+    val duracion: String? = null,
+    val totalTemporadas: Int? = null,
+    val totalCapitulos: Int? = null
 )

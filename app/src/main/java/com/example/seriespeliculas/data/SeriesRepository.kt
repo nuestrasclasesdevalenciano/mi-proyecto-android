@@ -13,6 +13,8 @@ class SeriesRepository(private val serieDao: SerieDao) {
 
     fun observeAll(): Flow<List<SerieEntity>> = serieDao.observeAll()
 
+    fun observeById(id: Long): Flow<SerieEntity?> = serieDao.observeById(id)
+
     suspend fun getById(id: Long): SerieEntity? = serieDao.getById(id)
 
     suspend fun añadir(
@@ -22,6 +24,10 @@ class SeriesRepository(private val serieDao: SerieDao) {
         posterPath: String? = null,
         mediaType: String? = null,
         genero: String? = null,
+        fechaLanzamiento: String? = null,
+        duracion: String? = null,
+        totalTemporadas: Int? = null,
+        totalCapitulos: Int? = null
     ) {
         val limpio = titulo.trim()
         if (limpio.isEmpty()) return
@@ -33,6 +39,10 @@ class SeriesRepository(private val serieDao: SerieDao) {
                 posterPath = posterPath,
                 mediaType = mediaType,
                 genero = genero,
+                fechaLanzamiento = fechaLanzamiento,
+                duracion = duracion,
+                totalTemporadas = totalTemporadas,
+                totalCapitulos = totalCapitulos
             ),
         )
     }
@@ -45,6 +55,8 @@ class SeriesRepository(private val serieDao: SerieDao) {
             posterPath = item.posterPath,
             mediaType = item.mediaType,
             genero = genero,
+            fechaLanzamiento = item.fechaLanzamiento,
+            duracion = item.duracion
         )
     }
 
@@ -54,5 +66,9 @@ class SeriesRepository(private val serieDao: SerieDao) {
 
     suspend fun actualizar(serie: SerieEntity) {
         serieDao.update(serie)
+    }
+
+    suspend fun limpiarTodo() {
+        serieDao.deleteAll()
     }
 }

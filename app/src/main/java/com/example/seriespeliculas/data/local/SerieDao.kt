@@ -14,6 +14,9 @@ interface SerieDao {
     @Query("SELECT * FROM series WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): SerieEntity?
 
+    @Query("SELECT * FROM series WHERE id = :id")
+    fun observeById(id: Long): Flow<SerieEntity?>
+
     @Query("SELECT * FROM series ORDER BY creadoEn DESC")
     fun observeAll(): Flow<List<SerieEntity>>
 
@@ -25,4 +28,7 @@ interface SerieDao {
 
     @Delete
     suspend fun delete(serie: SerieEntity)
+
+    @Query("DELETE FROM series")
+    suspend fun deleteAll()
 }

@@ -7,39 +7,93 @@ class TmdbRepository(
     private val api: TmdbApi,
     private val apiKeyConfigurada: Boolean,
 ) {
-    suspend fun buscarMulti(consulta: String): List<TmdbSearchItem> {
+    suspend fun buscarMulti(consulta: String, lang: String = "es-ES"): List<TmdbSearchItem> {
         val q = consulta.trim()
         if (!apiKeyConfigurada || q.isEmpty()) return emptyList()
 
         val response = try {
-            api.searchMulti(query = q)
+            api.searchMulti(query = q, language = lang)
         } catch (e: HttpException) {
             handleHttpException(e)
         }
 
-        return response.results.mapNotNull { it.toDomain() }
+        return response.results.flatMap { it.toDomainList() }.distinctBy { it.id }
     }
 
-    suspend fun obtenerTendencias(): List<TmdbSearchItem> {
+    suspend fun obtenerTendencias(lang: String = "es-ES"): List<TmdbSearchItem> {
         if (!apiKeyConfigurada) return emptyList()
         val response = try {
-            api.getTrending()
+            api.getTrending(language = lang)
+        } catch (e: HttpException) {
+            handleHttpException(e)
+        }
+        return response.results.flatMap { it.toDomainList() }.distinctBy { it.id }
+    }
+
+    suspend fun obtenerDetallePelicula(id: Long, lang: String = "es-ES") = try {
+        api.getMovieDetails(id, language = lang)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerDetalleSerie(id: Long, lang: String = "es-ES") = try {
+        api.getTvDetails(id, language = lang)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerDetallePersona(id: Long, lang: String = "es-ES") = try {
+        api.getPersonDetails(id, language = lang)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerSimilaresPelicula(id: Long, lang: String = "es-ES") = try {
+        api.getSimilarMovies(id, language = lang).results.mapNotNull { it.toDomain() }
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerSimilaresSerie(id: Long, lang: String = "es-ES") = try {
+        api.getSimilarTv(id, language = lang).results.mapNotNull { it.toDomain() }
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerDetalleTemporada(id: Long, seasonNumber: Int, lang: String = "es-ES") = try {
+        api.getTvSeasonDetails(id, seasonNumber, language = lang)
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerRecomendaciones(id: Long, type: String, lang: String = "es-ES") = try {
+        if (type == "movie") {
+            api.getMovieRecommendations(id, language = lang).results.mapNotNull { it.toDomain() }
+        } else {
+            api.getTvRecommendations(id, language = lang).results.mapNotNull { it.toDomain() }
+        }
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun descubrirPorGeneros(generos: String?, type: String, lang: String = "es-ES") = try {
+        if (type == "movie") {
+            api.discoverMovies(language = lang, genreIds = generos).results.mapNotNull { it.toDomain() }
+        } else {
+            api.discoverTv(language = lang, genreIds = generos).results.mapNotNull { it.toDomain() }
+        }
+    } catch (e: HttpException) {
+        handleHttpException(e)
+    }
+
+    suspend fun obtenerProximos(lang: String = "es-ES"): List<TmdbSearchItem> {
+        if (!apiKeyConfigurada) return emptyList()
+        val response = try {
+            api.getUpcomingMovies(language = lang)
         } catch (e: HttpException) {
             handleHttpException(e)
         }
         return response.results.mapNotNull { it.toDomain() }
-    }
-
-    suspend fun obtenerDetallePelicula(id: Long) = try {
-        api.getMovieDetails(id)
-    } catch (e: HttpException) {
-        handleHttpException(e)
-    }
-
-    suspend fun obtenerDetalleSerie(id: Long) = try {
-        api.getTvDetails(id)
-    } catch (e: HttpException) {
-        handleHttpException(e)
     }
 
     private fun handleHttpException(e: HttpException): Nothing {
@@ -50,6 +104,14 @@ class TmdbRepository(
             else -> "Error TMDB (${e.code()})."
         }
         throw IllegalStateException(mensaje, e)
+    }
+
+    private fun com.example.seriespeliculas.network.TmdbMultiResultDto.toDomainList(): List<TmdbSearchItem> {
+        if (mediaType == "person") {
+            return knownFor?.mapNotNull { it.toDomain() } ?: emptyList()
+        }
+        val domain = toDomain()
+        return if (domain != null) listOf(domain) else emptyList()
     }
 
     private fun com.example.seriespeliculas.network.TmdbMultiResultDto.toDomain(): TmdbSearchItem? {
@@ -63,6 +125,8 @@ class TmdbRepository(
             overview = overview,
             mediaType = type,
             generoIds = genreIds ?: emptyList(),
+            fechaLanzamiento = if (type == "movie") releaseDate else firstAirDate,
+            puntuacion = voteAverage
         )
     }
 
@@ -78,5 +142,17 @@ class TmdbRepository(
             10766 to "Soap", 10767 to "Talk", 10768 to "War & Politics"
         )
         return ids.mapNotNull { mapa[it] }.firstOrNull()
+    }
+
+    fun reverseMapearGenero(nombre: String): Int? {
+        val mapa = mapOf(
+            "Acción" to 28, "Aventura" to 12, "Animación" to 16, "Comedia" to 35,
+            "Crimen" to 80, "Documental" to 99, "Drama" to 18, "Familia" to 10751,
+            "Fantasía" to 14, "Historia" to 36, "Terror" to 27, "Música" to 10402,
+            "Misterio" to 9648, "Romance" to 10749, "Ciencia ficción" to 878,
+            "Película de TV" to 10770, "Suspense" to 53, "Bélica" to 10752,
+            "Western" to 37
+        )
+        return mapa[nombre]
     }
 }

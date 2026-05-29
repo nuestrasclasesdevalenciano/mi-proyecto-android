@@ -8,6 +8,9 @@ data class TmdbSearchItem(
     /** "movie" o "tv". */
     val mediaType: String,
     val generoIds: List<Int> = emptyList(),
+    val fechaLanzamiento: String? = null,
+    val duracion: String? = null,
+    val puntuacion: Double? = null
 ) {
     fun etiquetaTipo(): String = when (mediaType) {
         "movie" -> "Película"

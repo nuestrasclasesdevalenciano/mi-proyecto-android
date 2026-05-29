@@ -76,6 +76,8 @@ dependencies {
     // UI Libs
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation(libs.androidx.navigation.compose)
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.glance:glance-appwidget:1.1.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
